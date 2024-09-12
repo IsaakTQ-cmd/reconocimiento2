@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Deteccion de Objetos con TensorFlow</title>
+    <title>Reconocimiento con Cámara</title>
     <style>
         body {
             display: flex;
@@ -13,16 +13,18 @@
             height: 100vh;
             margin: 0;
             font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
         }
         h1 {
+            text-align: center;
             margin-bottom: 20px;
         }
-        #webcam-container {
-            width: 320px;
-            height: 240px;
-            background-color: #000;
+        video {
+            width: 100%;
+            max-width: 600px;
+            height: auto;
             border: 2px solid #ccc;
-            margin-bottom: 20px;
+            border-radius: 10px;
         }
         button {
             margin-top: 20px;
@@ -37,31 +39,31 @@
         button:hover {
             background-color: #218838;
         }
-        #result {
+        #label-container {
             margin-top: 20px;
             font-size: 18px;
-            font-weight: bold;
+            color: #333;
         }
     </style>
 </head>
 <body>
 
-    <h1>Deteccion de objetos con TensorFlow</h1>
-    <div id="webcam-container"></div>
-    <button type="button" onclick="init()">Start</button>
-    <div id="result"></div>
+    <h1>Reconocimiento con Cámara</h1>
+    <video id="video" autoplay playsinline></video>
+    <button onclick="init()">Iniciar Reconocimiento</button>
+    <div id="label-container"></div>
 
-    <!-- Cargar las bibliotecas necesarias de TensorFlow.js y Teachable Machine -->
+    <!-- Cargar TensorFlow.js y Teachable Machine -->
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
 
     <script type="text/javascript">
-        // Enlace a tu modelo proporcionado por el panel de exportación de Teachable Machine
+        // URL de tu modelo entrenado en Teachable Machine
         const URL = "https://teachablemachine.withgoogle.com/models/_eZJHBsgW/";
 
-        let model, webcam, resultContainer, maxPredictions;
+        let model, webcam, labelContainer, maxPredictions;
 
-        // Cargar el modelo de imagen y configurar la webcam
+        // Función para inicializar el modelo y la cámara (frontal o trasera)
         async function init() {
             const modelURL = URL + "model.json";
             const metadataURL = URL + "metadata.json";
@@ -70,43 +72,57 @@
             model = await tmImage.load(modelURL, metadataURL);
             maxPredictions = model.getTotalClasses();
 
-            // Configurar la webcam
-            const flip = true; // voltear la imagen de la webcam
-            webcam = new tmImage.Webcam(320, 240, flip); // ancho, alto, flip
-            await webcam.setup(); // solicitar acceso a la cámara
-            await webcam.play();
-            window.requestAnimationFrame(loop);
+            // Detectar si es móvil o computadora para usar la cámara correspondiente
+            const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+            const facingMode = isMobile ? { exact: "environment" } : "user"; // Trasera en móvil, frontal en web
 
-            // Agregar los elementos de la webcam al DOM
-            document.getElementById("webcam-container").appendChild(webcam.canvas);
-            resultContainer = document.getElementById("result");
-        }
-
-        // Bucle para actualizar la webcam y hacer predicciones
-        async function loop() {
-            webcam.update(); // actualizar el frame de la webcam
-            await predict();
-            window.requestAnimationFrame(loop);
-        }
-
-        // Ejecutar la imagen de la webcam a través del modelo de imagen
-        async function predict() {
-            const prediction = await model.predict(webcam.canvas);
-            let detected = false;
-            resultContainer.innerHTML = ""; // Limpiar el resultado anterior
-
-            for (let i = 0; i < maxPredictions; i++) {
-                // Verificar si la probabilidad es mayor a 99.5%
-                if (prediction[i].probability * 100 > 99.5) {
-                    resultContainer.innerHTML = "¡Detectado: " + prediction[i].className + "!";
-                    detected = true;
-                    break; // Salir del bucle si se detecta con alta probabilidad
+            // Configuración de la cámara
+            const constraints = {
+                video: {
+                    facingMode: facingMode,
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
                 }
+            };
+
+            // Solicitar acceso a la cámara
+            try {
+                webcam = new tmImage.Webcam(300, 300, false); // Crear webcam
+                await webcam.setup({ facingMode: facingMode });
+                await webcam.play();
+                document.getElementById("video").srcObject = webcam.webcam.stream;
+                window.requestAnimationFrame(loop);
+            } catch (err) {
+                console.error("No se pudo acceder a la cámara: ", err);
+                alert("No se pudo acceder a la cámara.");
             }
 
-            // Si no se detectó nada con alta probabilidad, limpiar el mensaje de resultado
-            if (!detected) {
-                resultContainer.innerHTML = "";
+            // Crear contenedor de etiquetas
+            labelContainer = document.getElementById("label-container");
+            for (let i = 0; i < maxPredictions; i++) {
+                labelContainer.appendChild(document.createElement("div"));
+            }
+        }
+
+        // Bucle para actualizar la webcam y realizar predicciones
+        async function loop() {
+            webcam.update(); // Actualizar el frame de la cámara
+            await predict(); // Realizar predicción
+            window.requestAnimationFrame(loop);
+        }
+
+        // Realizar predicciones con el modelo de Teachable Machine
+        async function predict() {
+            const prediction = await model.predict(webcam.canvas);
+
+            // Mostrar solo las predicciones con 100% de certeza
+            labelContainer.innerHTML = "";
+            for (let i = 0; i < maxPredictions; i++) {
+                if (prediction[i].probability.toFixed(2) == 1.00) {
+                    const classPrediction =
+                        prediction[i].className + ": " + (prediction[i].probability * 100).toFixed(2) + "%";
+                    labelContainer.innerHTML = classPrediction;
+                }
             }
         }
     </script>
