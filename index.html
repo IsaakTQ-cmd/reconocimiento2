@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Escanear con Teachable Machine</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+        h1 {
+            margin-bottom: 20px;
+            text-align: center;
+            font-size: 1.5rem;
+        }
+        #webcam-container {
+            width: 100%;
+            max-width: 320px;
+            height: auto;
+            aspect-ratio: 1;
+            background-color: #000;
+            border: 2px solid #ccc;
+            margin-bottom: 20px;
+        }
+        button {
+            margin-top: 20px;
+            padding: 10px 20px;
+            font-size: 1rem;
+            cursor: pointer;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 5px;
+        }
+        button:hover {
+            background-color: #218838;
+        }
+        #result {
+            margin-top: 20px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            text-align: center;
+        }
+        @media (max-width: 480px) {
+            button {
+                padding: 8px 16px;
+                font-size: 0.9rem;
+            }
+            h1 {
+                font-size: 1.2rem;
+            }
+            #result {
+                font-size: 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Teachable Machine Image Model</h1>
+    <button type="button" onclick="init()">Start</button>
+    <div id="webcam-container"></div>
+    <div id="result"></div>
+
+    <!-- Cargar las bibliotecas necesarias de TensorFlow.js y Teachable Machine -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+
+    <script type="text/javascript">
+        // Enlace a tu modelo proporcionado por el panel de exportación de Teachable Machine
+        const URL = "https://teachablemachine.withgoogle.com/models/_eZJHBsgW/";
+
+        let model, webcam, resultContainer, maxPredictions;
+
+        // Cargar el modelo de imagen y configurar la webcam
+        async function init() {
+            const modelURL = URL + "model.json";
+            const metadataURL = URL + "metadata.json";
+
+            // Cargar el modelo y los metadatos
+            model = await tmImage.load(modelURL, metadataURL);
+            maxPredictions = model.getTotalClasses();
+
+            // Configurar la webcam
+            const flip = true; // voltear la imagen de la webcam
+            webcam = new tmImage.Webcam(200, 200, flip); // ancho, alto, flip
+            await webcam.setup(); // solicitar acceso a la cámara
+            await webcam.play();
+            window.requestAnimationFrame(loop);
+
+            // Agregar los elementos de la webcam al DOM
+            document.getElementById("webcam-container").appendChild(webcam.canvas);
+            resultContainer = document.getElementById("result");
+        }
+
+        // Bucle para actualizar la webcam y hacer predicciones
+        async function loop() {
+            webcam.update(); // actualizar el frame de la webcam
+            await predict();
+            window.requestAnimationFrame(loop);
+        }
+
+        // Ejecutar la imagen de la webcam a través del modelo de imagen
+        async function predict() {
+            const prediction = await model.predict(webcam.canvas);
+            let detected = false;
+            resultContainer.innerHTML = ""; // Limpiar el resultado anterior
+
+            for (let i = 0; i < maxPredictions; i++) {
+                const classPrediction =
+                    prediction[i].className + ": " + (prediction[i].probability * 100).toFixed(2) + "%";
+
+                // Verificar si la probabilidad es mayor a 99.5%
+                if (prediction[i].probability * 100 > 99.5) {
+                    resultContainer.innerHTML = "¡Detectado: " + prediction[i].className + "!";
+                    detected = true;
+                    break; // Salir del bucle si se detecta con alta probabilidad
+                }
+            }
+
+            // Si no se detectó nada con alta probabilidad, limpiar el mensaje de resultado
+            if (!detected) {
+                resultContainer.innerHTML = "";
+            }
+        }
+    </script>
+
+</body>
+</html>
